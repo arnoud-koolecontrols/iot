@@ -14,14 +14,15 @@ using System.Threading;
 using Iot.Device.Card;
 using Iot.Device.Card.Mifare;
 using Iot.Device.Rfid;
+using Iot.Device.Nfc;
 
 namespace Iot.Device.Pn5180
 {
     /// <summary>
-    /// A PN5180 class offering RFID and NFC functionalities. Implement the CardTransceiver class to
-    /// allow Mifare, Credit Card support
+    /// A PN5180 class offering RFID and NFC functionalities. Implement the NfcTransceiver class to
+    /// allow Mifare, Credit Card support and nfc p2p support
     /// </summary>
-    public class Pn5180 : CardTransceiver, IDisposable
+    public class Pn5180 : NfcTransceiver, IDisposable
     {
         private const int TimeoutWaitingMilliseconds = 2_000;
 
@@ -962,6 +963,121 @@ namespace Iot.Device.Pn5180
             }
 
             return true;
+        }
+
+        #endregion
+
+        #region Nfc
+
+        public override int TransmitData(byte targetNumber, ReadOnlySpan<byte> dataToSend)
+        {
+            if (targetNumber == 0)
+            {
+                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataToSend: {BitConverter.ToString(dataToSend.ToArray())}", LogLevel.None);
+                // Clears all interrupt
+                SpiWriteRegister(Command.WRITE_REGISTER, Register.IRQ_CLEAR, new byte[] { 0xFF, 0xFF, 0x0F, 0x00 });
+                bool ret = SendDataToCard(dataToSend.ToArray());
+                // 10 etu needed for 1 byte, 1 etu = 9.4 µs, so about 100 µs are needed to transfer 1 character
+                int timeout = (dataToSend.Length / 10) + 1;
+                DateTime dtTimeout = DateTime.Now.AddMilliseconds(timeout);
+                byte[] status = new byte[4];
+                SpiReadRegister(Register.IRQ_STATUS, status);
+                while ((status[0] & 0x02) != 0x02)
+                {
+                    if (dtTimeout <= DateTime.Now)
+                    {
+                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} TransmitData timeout", LogLevel.None);
+                        return -1;
+                    }
+
+                    Thread.Sleep(1);
+                    SpiReadRegister(Register.IRQ_STATUS, status);        
+                }
+
+                return 0;
+            } else
+            {
+                // Type B not supported yett
+            }
+
+            return -1;
+        }
+
+        public override bool DataReceived(byte targetNumber)
+        {
+            if (targetNumber == 0)
+            {
+                byte[] status = new byte[4];
+                SpiReadRegister(Register.IRQ_STATUS, status);
+                return ((status[0] & 0x01) == 0x01);
+            }
+
+            return false;
+        }
+
+        public override int ReceiveData(byte targetNumber, out Span<byte> dataToReceive, int timeOutInMilliSeconds)
+        {
+            dataToReceive = new byte[0];
+            if (targetNumber == 0)
+            {
+                DateTime dtTimeout = DateTime.Now.AddMilliseconds(timeOutInMilliSeconds);
+                while (! DataReceived(targetNumber))
+                {
+                    if (dtTimeout <= DateTime.Now)
+                    {
+                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} ReceiveData timeout", LogLevel.None);
+                        return -1;
+                    }
+
+                    Thread.Sleep(1);
+                }
+
+                int numBytes;
+                (numBytes, _) = GetNumberOfBytesReceivedAndValidBits();
+                dataToReceive = new byte[numBytes];
+                if (numBytes > 0)
+                {
+                    ReadDataFromCard(dataToReceive);
+                }
+
+                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataReceived: {BitConverter.ToString(dataToReceive.ToArray())}", LogLevel.None);
+                return numBytes;
+            }
+
+            return -1;
+        }
+
+        public override int Transceive(byte targetNumber, ReadOnlySpan<byte> dataToSend, out Span<byte> dataFromCard, int timeOutInMilliSeconds)
+        {
+            int result = -1;
+            dataFromCard = new byte[0];
+
+            if (targetNumber == 0)
+            {
+                // Check if we have a Mifare Card authentication request
+                // Only valid for Type A card so with a target number equal to 0
+                if ((targetNumber == 0) && ((dataToSend[0] == (byte)MifareCardCommand.AuthenticationA) || (dataToSend[0] == (byte)MifareCardCommand.AuthenticationB)))
+                {
+                    var ret = MifareAuthenticate(dataToSend.Slice(2, 6).ToArray(), (MifareCardCommand)dataToSend[0], dataToSend[1], dataToSend.Slice(8).ToArray());
+                    return ret ? 0 : -1;
+                }
+                else
+                {
+                    // Clears all interrupt
+                    result = TransmitData(targetNumber, dataToSend);
+                    if (result >= 0)
+                    {
+                        return ReceiveData(targetNumber, out dataFromCard, timeOutInMilliSeconds);
+                    }                  
+                }
+
+            }
+            else
+            {
+                // Type B not supported yett
+            }
+
+            return result;
         }
 
         #endregion
