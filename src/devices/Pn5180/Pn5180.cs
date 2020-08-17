@@ -970,6 +970,7 @@ namespace Iot.Device.Pn5180
 
         #region Nfc
 
+        /// <inheritdoc/>
         public override int TransmitData(byte targetNumber, ReadOnlySpan<byte> dataToSend)
         {
             if (targetNumber == 0)
@@ -1001,6 +1002,7 @@ namespace Iot.Device.Pn5180
             return -1;
         }
 
+        /// <inheritdoc/>
         public override bool DataReceived(byte targetNumber)
         {
             if (targetNumber == 0)
@@ -1013,6 +1015,7 @@ namespace Iot.Device.Pn5180
             return false;
         }
 
+        /// <inheritdoc/>
         public override int ReceiveData(byte targetNumber, out Span<byte> dataToReceive, int timeOutInMilliSeconds)
         {
             dataToReceive = new byte[0];
@@ -1047,6 +1050,7 @@ namespace Iot.Device.Pn5180
             return -1;
         }
 
+        /// <inheritdoc/>
         public override int Transceive(byte targetNumber, ReadOnlySpan<byte> dataToSend, out Span<byte> dataFromCard, int timeOutInMilliSeconds)
         {
             int result = -1;
@@ -1074,7 +1078,7 @@ namespace Iot.Device.Pn5180
             }
             else
             {
-                // Type B not supported yett
+                // Type B not supported yet
             }
 
             return result;
