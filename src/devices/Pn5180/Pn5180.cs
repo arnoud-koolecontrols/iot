@@ -967,13 +967,14 @@ namespace Iot.Device.Pn5180
 
         #endregion
 
+
         #region Nfc
 
         public override int TransmitData(byte targetNumber, ReadOnlySpan<byte> dataToSend)
         {
             if (targetNumber == 0)
             {
-                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataToSend: {BitConverter.ToString(dataToSend.ToArray())}", LogLevel.None);
+                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataToSend: {BitConverter.ToString(dataToSend.ToArray())}", LogLevel.Debug);
                 // Clears all interrupt
                 SpiWriteRegister(Command.WRITE_REGISTER, Register.IRQ_CLEAR, new byte[] { 0xFF, 0xFF, 0x0F, 0x00 });
                 bool ret = SendDataToCard(dataToSend.ToArray());
@@ -986,7 +987,7 @@ namespace Iot.Device.Pn5180
                 {
                     if (dtTimeout <= DateTime.Now)
                     {
-                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} TransmitData timeout", LogLevel.None);
+                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} TransmitData timeout", LogLevel.Debug);
                         return -1;
                     }
 
@@ -995,9 +996,6 @@ namespace Iot.Device.Pn5180
                 }
 
                 return 0;
-            } else
-            {
-                // Type B not supported yett
             }
 
             return -1;
@@ -1025,13 +1023,15 @@ namespace Iot.Device.Pn5180
                 {
                     if (dtTimeout <= DateTime.Now)
                     {
-                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} ReceiveData timeout", LogLevel.None);
+                        LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} ReceiveData timeout", LogLevel.Debug);
                         return -1;
                     }
 
                     Thread.Sleep(1);
                 }
 
+                // Clear RX_IRQ_STAT
+                SpiWriteRegister(Command.WRITE_REGISTER, Register.IRQ_CLEAR, new byte[] { 0x01, 0x00, 0x00, 0x00 });    
                 int numBytes;
                 (numBytes, _) = GetNumberOfBytesReceivedAndValidBits();
                 dataToReceive = new byte[numBytes];
@@ -1040,7 +1040,7 @@ namespace Iot.Device.Pn5180
                     ReadDataFromCard(dataToReceive);
                 }
 
-                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataReceived: {BitConverter.ToString(dataToReceive.ToArray())}", LogLevel.None);
+                LogInfo.Log($"{DateTime.Now.ToString("HH:mm:ss.fff")} dataReceived: {BitConverter.ToString(dataToReceive.ToArray())}", LogLevel.Debug);
                 return numBytes;
             }
 
